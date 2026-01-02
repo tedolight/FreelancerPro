@@ -12,13 +12,25 @@ export default function SubmitProposal() {
     const navigate = useNavigate();
     const { selectedJob, fetchJobById, loading: jobLoading } = useJobStore();
     const { create, loading: proposalLoading } = useProposalStore();
-    const { user } = useAuthStore();
+    const { user, refreshUser } = useAuthStore();
 
     const [coverLetter, setCoverLetter] = useState('');
     const [bidAmount, setBidAmount] = useState('');
     const [duration, setDuration] = useState('less_than_1_month');
     const [attachments, setAttachments] = useState([]);
     const [files, setFiles] = useState([]);
+
+    // Refresh user data on component mount to get latest KYC status
+    useEffect(() => {
+        const refreshUserData = async () => {
+            try {
+                await refreshUser();
+            } catch (error) {
+                console.error('Failed to refresh user data:', error);
+            }
+        };
+        refreshUserData();
+    }, [refreshUser]);
 
     // Redirect clients away from this page
     useEffect(() => {
@@ -36,6 +48,35 @@ export default function SubmitProposal() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+
+        // Check KYC verification status (always enforced)
+        if (!user?.kycVerified) {
+            toast.error(
+                (t) => (
+                    <div className="flex flex-col gap-2">
+                        <p className="font-medium">KYC Verification Required</p>
+                        <p className="text-sm">Please complete identity verification (KYC) before applying for jobs.</p>
+                        <button
+                            onClick={() => {
+                                toast.dismiss(t.id);
+                                navigate('/profile?tab=kyc');
+                            }}
+                            className="mt-2 px-4 py-2 bg-white text-green-600 border border-green-600 rounded-lg text-sm font-medium hover:bg-green-50 transition-colors"
+                        >
+                            Upload KYC Documents
+                        </button>
+                    </div>
+                ),
+                {
+                    duration: 8000,
+                    style: {
+                        maxWidth: '500px',
+                    }
+                }
+            );
+            return;
+        }
+
         if (!coverLetter || !bidAmount) {
             toast.error('Please fill in all required fields');
             return;

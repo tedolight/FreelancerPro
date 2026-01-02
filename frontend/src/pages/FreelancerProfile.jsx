@@ -14,7 +14,7 @@ export default function FreelancerProfile() {
         const fetchFreelancer = async () => {
             try {
                 setLoading(true);
-                const response = await api.get(`/v1/users/${id}`);
+                const response = await api.get(`/users/${id}`);
                 setFreelancer(response.data.data || response.data);
             } catch (err) {
                 setError(err.response?.data?.message || 'Failed to load freelancer profile');

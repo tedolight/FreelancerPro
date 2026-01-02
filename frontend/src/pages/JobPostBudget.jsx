@@ -16,7 +16,7 @@ export default function JobPostBudget() {
   const [visibility, setVisibility] = useState(location.state?.visibility || 'Public, including search engines');
   const visibilityOptions = [
     'Public, including search engines',
-    'Upwork users only',
+    'FreelancerPro users only',
     'Invite only'
   ];
   const [showVisibility, setShowVisibility] = useState(false);
@@ -93,7 +93,7 @@ export default function JobPostBudget() {
               <div className="mb-6">
                 <div className="bg-gray-50 rounded-lg p-4 mb-4">
                   <p className="text-sm text-gray-700 mb-2">
-                    Hi there. I'm Uma, Upwork's Mindful AI. I'm here to help you write a job post that gets noticed. What do you need done?
+                    Hi there. I'm Uma, FreelancerPro's Mindful AI. I'm here to help you write a job post that gets noticed. What do you need done?
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2 mb-4">

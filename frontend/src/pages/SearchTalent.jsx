@@ -34,14 +34,14 @@ export default function SearchTalent() {
             try {
                 const query = searchParams.get('q') || '';
 
-                // Category to skills mapping
-                const categorySkillsMap = {
-                    'development it': ['JavaScript', 'Python', 'React', 'Node.js', 'PHP', 'Java', 'C++', 'TypeScript', 'Angular', 'Vue.js'],
-                    'ai services': ['Machine Learning', 'AI', 'TensorFlow', 'PyTorch', 'NLP', 'Data Science', 'Deep Learning', 'Computer Vision'],
-                    'design': ['UI/UX', 'Graphic Design', 'Adobe Photoshop', 'Figma', 'Illustrator', 'Web Design', 'Logo Design', 'Branding'],
-                    'marketing': ['Digital Marketing', 'SEO', 'Content Marketing', 'Social Media', 'Email Marketing', 'PPC', 'Marketing Strategy'],
-                    'writing translation': ['Content Writing', 'Copywriting', 'Translation', 'Technical Writing', 'Blog Writing', 'Proofreading'],
-                    'administration': ['Virtual Assistant', 'Data Entry', 'Customer Support', 'Admin Support', 'Email Management', 'Scheduling']
+                // Category to backend category mapping
+                const categoryMap = {
+                    'development it': 'Development & IT',
+                    'ai services': 'AI Services',
+                    'design': 'Design & Creative',
+                    'marketing': 'Sales & Marketing',
+                    'writing translation': 'Writing & Translation',
+                    'administration': 'Admin & Support'
                 };
 
                 const params = {
@@ -50,14 +50,14 @@ export default function SearchTalent() {
 
                 // Check if query matches a category
                 const normalizedQuery = query.toLowerCase().trim();
-                const matchedSkills = categorySkillsMap[normalizedQuery];
+                const mappedCategory = categoryMap[normalizedQuery];
 
-                if (matchedSkills) {
-                    // Use skills filter for category searches
-                    params.skills = matchedSkills.join(',');
+                if (mappedCategory) {
+                    // Use category filter for category searches
+                    params.category = mappedCategory;
                 } else if (query) {
                     // Use text query for custom searches
-                    params.query = query;
+                    params.q = query;
                 }
 
                 // Add other filters to params if needed

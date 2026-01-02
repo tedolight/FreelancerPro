@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useUserStore } from '../store/useUserStore.js';
+import { useAuthStore } from '../store/useAuthStore.js';
 import { useRef } from 'react';
-import { uploadKYC, getPortfolio, updatePortfolio, uploadFile } from '../api/userApi.js';
+import { uploadKYC, getPortfolio, updatePortfolio, uploadAvatar } from '../api/userApi.js';
 import TwoFactorAuth from '../components/auth/TwoFactorAuth.jsx';
 import Modal from '../components/common/Modal.jsx';
 import { User, Shield, Briefcase, Save, Plus, Trash2, Upload, Camera } from 'lucide-react';
 
 export default function Profile() {
   const { profile, loading, error, loadProfile, updateProfile } = useUserStore();
+  const refreshUser = useAuthStore((state) => state.refreshUser);
   const [form, setForm] = useState({ firstName: '', lastName: '' });
   const [kycFile, setKycFile] = useState(null);
   const [portfolio, setPortfolio] = useState([]);
@@ -61,30 +63,45 @@ export default function Profile() {
   }
 
   async function attachPhoto() {
-    if (selectedFile) {
-      const formData = new FormData();
-      formData.append('file', selectedFile);
-      formData.append('folder', 'avatars');
+    console.log('🚀 [attachPhoto] Function called');
+    console.log('📋 [attachPhoto] selectedFile:', selectedFile);
+    console.log('📋 [attachPhoto] hasFile:', !!selectedFile);
 
-      try {
-        const res = await uploadFile(formData);
-        const uploadData = res.data.data;
-        setPhotoFile(uploadData.url);
-        // Update profile immediately with new avatar object
-        await updateProfile({
-          avatar: {
-            url: uploadData.url,
-            publicId: uploadData.publicId
-          }
-        });
-        alert('Photo uploaded updated!');
-      } catch (err) {
-        console.error(err);
-        alert('Failed to upload photo');
-        return;
-      }
+    if (!selectedFile) {
+      console.warn('⚠️ [attachPhoto] No file selected');
+      alert('Please select a photo first');
+      return;
     }
-    setShowPhotoModal(false);
+
+    console.log('📦 [attachPhoto] Creating FormData...');
+    const formData = new FormData();
+    // IMPORTANT: Backend expects field name 'avatar', not 'file'
+    formData.append('avatar', selectedFile);
+    console.log('✅ [attachPhoto] FormData created with field name "avatar"');
+
+    try {
+      console.log('🌐 [attachPhoto] Calling uploadAvatar API...');
+      const res = await uploadAvatar(formData);
+      console.log('📥 [attachPhoto] Response received:', res);
+
+      const avatarData = res.data;
+      console.log('✅ [attachPhoto] Avatar uploaded and saved:', avatarData);
+
+      setPhotoFile(avatarData.avatar.url);
+      setSelectedFile(null);
+
+      console.log('🔄 [attachPhoto] Refreshing user data...');
+      await refreshUser();
+      console.log('✅ [attachPhoto] User data refreshed');
+
+      alert('Photo uploaded successfully!');
+      setShowPhotoModal(false);
+    } catch (err) {
+      console.error('❌ [attachPhoto] Upload error:', err);
+      console.error('❌ [attachPhoto] Error response:', err.response);
+      console.error('❌ [attachPhoto] Error data:', err.response?.data);
+      alert(err.response?.data?.message || err.message || 'Failed to upload photo');
+    }
   }
 
   const onSubmit = async (e) => {
@@ -269,6 +286,8 @@ export default function Profile() {
                       formData.append('document', kycFile);
                       await uploadKYC(formData);
                       alert('KYC document uploaded successfully!');
+                      // Refresh user data to update KYC status
+                      await refreshUser();
                       setKycFile(null);
                       // Reset file input
                       const fileInput = document.querySelector('input[type="file"]');

@@ -13,7 +13,7 @@ const allOtherPrefs = [
   'English level',
   'Languages',
   'Agency preference',
-  'History on Upwork',
+  'History on FreelancerPro',
 ];
 
 // New preference config
@@ -43,8 +43,8 @@ const prefsConfig = {
     options: ['Yes', 'No', 'No preference'],
     multi: false,
   },
-  'History on Upwork': {
-    label: 'History on Upwork',
+  'History on FreelancerPro': {
+    label: 'History on FreelancerPro',
     options: ['New', '1-5 jobs', '5+ jobs'],
     multi: false,
   },
@@ -80,7 +80,7 @@ export default function JobPostFreelancer() {
     'English level': [],
     'Languages': [],
     'Agency preference': [],
-    'History on Upwork': []
+    'History on FreelancerPro': []
   });
 
   // Handlers for skills and tools
@@ -281,7 +281,7 @@ export default function JobPostFreelancer() {
                     <div className="flex-1 mt-6 md:mt-0">
                       <label className="block text-lg font-semibold text-gray-900 mb-3">Specialty</label>
                       <CustomSelect
-                        options={specialties[category]?.map(s => ({ label: s, value: s })) || []}
+                        options={specialties[category] || []}
                         value={specialty}
                         onChange={(val) => setSpecialty(val)}
                         placeholder="Select specialty"
@@ -412,8 +412,11 @@ export default function JobPostFreelancer() {
                       <div className="relative">
                         <CustomSelect
                           options={prefsConfig[type].options
-                            .filter(opt => prefsConfig[type].multi ? !preferenceValues[type].includes(opt) : true)
-                            .map(opt => ({ label: opt, value: opt }))
+                            .filter(opt => {
+                              const val = typeof opt === 'object' ? opt.value : opt;
+                              return prefsConfig[type].multi ? !preferenceValues[type].includes(val) : true;
+                            })
+                            .map(opt => typeof opt === 'object' ? opt : { label: opt, value: opt })
                           }
                           value={prefsConfig[type].multi ? '' : (preferenceValues[type][0] || '')}
                           onChange={(val) => handleAddPrefVal(type, val)}
@@ -422,12 +425,16 @@ export default function JobPostFreelancer() {
                       </div>
                       {preferenceValues[type].length > 0 && (
                         <div className="flex flex-wrap gap-2 mt-4">
-                          {preferenceValues[type].map(l => (
-                            <span key={l} className="flex items-center bg-green-100 rounded-full px-4 py-2 text-green-700 text-base border border-green-200">
-                              {l}
-                              <button onClick={() => handleRemovePrefVal(type, l)} className="ml-2 text-green-400 hover:text-red-600"><X size={16} /></button>
-                            </span>
-                          ))}
+                          {preferenceValues[type].map(val => {
+                            const originalOpt = prefsConfig[type].options.find(opt => (typeof opt === 'object' ? opt.value : opt) === val);
+                            const label = originalOpt ? (typeof originalOpt === 'object' ? originalOpt.label : originalOpt) : val;
+                            return (
+                              <span key={val} className="flex items-center bg-green-100 rounded-full px-4 py-2 text-green-700 text-base border border-green-200">
+                                {label}
+                                <button onClick={() => handleRemovePrefVal(type, val)} className="ml-2 text-green-400 hover:text-red-600"><X size={16} /></button>
+                              </span>
+                            )
+                          })}
                         </div>
                       )}
                     </div>

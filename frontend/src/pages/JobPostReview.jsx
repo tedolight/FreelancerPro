@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { X, Edit2, Check, X as XIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useJobStore } from '../store/useJobStore.js';
+import { useAuthStore } from '../store/useAuthStore.js';
 
 export default function JobPostReview() {
   const navigate = useNavigate();
@@ -11,8 +12,22 @@ export default function JobPostReview() {
   const [showModal, setShowModal] = useState(true);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const createJob = useJobStore((state) => state.createJob);
+  const user = useAuthStore((state) => state.user);
+  const refreshUser = useAuthStore((state) => state.refreshUser);
   const [posting, setPosting] = useState(false);
   const [postError, setPostError] = useState(null);
+
+  // Refresh user data on component mount to get latest KYC status
+  useEffect(() => {
+    const refreshUserData = async () => {
+      try {
+        await refreshUser();
+      } catch (error) {
+        console.error('Failed to refresh user data:', error);
+      }
+    };
+    refreshUserData();
+  }, [refreshUser]);
 
   // Get all job data from location.state (passed from previous steps)
   // Initialize local state for editing
@@ -27,7 +42,12 @@ export default function JobPostReview() {
     title = 'Creative Logo',
     summary = 'We are seeking a talented graphic designer...',
     category = 'Brand Identity Design',
-    skills = ['Graphic Design', 'Logo Design', 'Adobe InDesign', 'Web Design'],
+    // Combine skills if not already present in 'skills' 
+    skills = localJobData.skills || [
+      ...(localJobData.mandatorySkills || []),
+      ...(localJobData.niceSkills || []),
+      ...(localJobData.tools || [])
+    ].filter(Boolean),
     projectType = 'hourly',
     budgetFrom = '10.00',
     budgetTo = '100.00',
@@ -36,6 +56,13 @@ export default function JobPostReview() {
     coworkers = [],
     files = [],
   } = localJobData;
+
+  // Fallback to dummy skills only if absolutely no skills found from previous step
+  if (skills.length === 0 && !localJobData.skills && !localJobData.mandatorySkills) {
+    // Optional: set some defaults or leave empty. 
+    // Keeping previous defaults if needed, but better to be empty if user entered nothing.
+    // skills.push('Graphic Design', 'Logo Design'); 
+  }
 
   const handleEditClick = (field, value) => {
     setEditingField(field);
@@ -71,6 +98,18 @@ export default function JobPostReview() {
   };
 
   const submitJobToBackend = async () => {
+    // Check verification status (skip in development)
+    if (!import.meta.env.DEV && (!user?.emailVerified || !user?.kycVerified)) {
+      const missingVerifications = [];
+      if (!user?.emailVerified) missingVerifications.push('email verification');
+      if (!user?.kycVerified) missingVerifications.push('identity verification (KYC)');
+
+      const message = `Account verification required. Please complete ${missingVerifications.join(' and ')} before posting a job.`;
+      setPostError(message);
+      toast.error(message, { duration: 5000 });
+      return;
+    }
+
     if (!localJobData?.title || !localJobData?.summary) {
       const message = 'Missing job details. Please complete all fields.';
       setPostError(message);
@@ -81,6 +120,18 @@ export default function JobPostReview() {
 
     // Debug logging
     console.log('Job payload being sent:', payload);
+    console.log('Attachments type:', typeof payload.attachments);
+    console.log('Attachments is array:', Array.isArray(payload.attachments));
+    console.log('Attachments content:', JSON.stringify(payload.attachments, null, 2));
+
+    // Validate attachments are not stringified
+    if (payload.attachments && Array.isArray(payload.attachments)) {
+      payload.attachments.forEach((att, index) => {
+        if (typeof att === 'string') {
+          console.error(`Attachment at index ${index} is a string, should be object:`, att);
+        }
+      });
+    }
 
     if (!payload.budget.amount) {
       const message = 'Please provide a budget greater than 0 before posting your job.';
@@ -101,12 +152,20 @@ export default function JobPostReview() {
     } catch (error) {
       console.error('Job post error:', error);
       console.error('Error response:', error.response?.data);
+      console.error('Error status:', error.response?.status);
+      console.error('Error message:', error.response?.data?.message || error.message);
       let message = error.response?.data?.message || error.message || 'Failed to post job';
 
       // Handle Mongoose validation errors
       if (error.response?.data?.errors) {
         const details = Object.values(error.response.data.errors).map(err => err.message || err).join('. ');
         if (details) message += `: ${details}`;
+      }
+
+      // Show detailed error for debugging
+      if (error.response?.data?.details) {
+        console.error('Error details:', error.response.data.details);
+        message += ` - ${JSON.stringify(error.response.data.details)}`;
       }
 
       setPostError(message);
@@ -142,8 +201,25 @@ export default function JobPostReview() {
           </button>
         </div>
         {postError && (
-          <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {postError}
+          <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1">
+                <p className="text-sm text-red-700 font-medium">{postError}</p>
+                {(!user?.kycVerified || !user?.emailVerified) && (
+                  <p className="text-xs text-red-600 mt-2">
+                    Please complete the required verifications to post your job.
+                  </p>
+                )}
+              </div>
+              {!user?.kycVerified && (
+                <button
+                  onClick={() => navigate('/profile')}
+                  className="flex-shrink-0 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors"
+                >
+                  Complete KYC Verification
+                </button>
+              )}
+            </div>
           </div>
         )}
 
@@ -448,6 +524,57 @@ function buildJobPayload(jobData) {
   // Ensure budget amount is always greater than 0
   const budgetAmount = projectType === 'fixed' ? (fixedAmount || 1) : (hourlyAmount || 1);
 
+  // Parse attachments - handle multiple levels of stringification
+  let attachments = jobData.files || [];
+
+  console.log('Raw attachments from jobData:', attachments);
+  console.log('Raw attachments type:', typeof attachments);
+
+  // If it's a string, try to parse it
+  if (typeof attachments === 'string') {
+    try {
+      attachments = JSON.parse(attachments);
+      console.log('Parsed attachments from string:', attachments);
+    } catch (e) {
+      console.error('Failed to parse attachments string:', e);
+      attachments = [];
+    }
+  }
+
+  // Ensure attachments is an array
+  if (!Array.isArray(attachments)) {
+    console.warn('Attachments is not an array, converting to empty array');
+    attachments = [];
+  }
+
+  // Check if the first element is a stringified array (double-wrapped case)
+  if (attachments.length > 0 && typeof attachments[0] === 'string') {
+    try {
+      // Try to parse the first element as it might be a stringified array
+      const parsed = JSON.parse(attachments[0]);
+      if (Array.isArray(parsed)) {
+        console.log('Detected double-wrapped attachments, unwrapping...');
+        attachments = parsed;
+      }
+    } catch (e) {
+      // Not a JSON string, keep as is
+      console.log('First element is a string but not JSON, keeping as is');
+    }
+  }
+
+  // Filter and clean attachments to ensure they have the required fields
+  attachments = attachments
+    .filter(file => file && typeof file === 'object' && !file.uploading)
+    .map(file => ({
+      url: file.url || '',
+      publicId: file.publicId || '',
+      name: file.name || '',
+      size: file.size || 0,
+      type: file.type || ''
+    }));
+
+  console.log('Final cleaned attachments:', attachments);
+
   return {
     title: jobData.title || 'Untitled Job',
     description: jobData.summary || jobData.description || 'Job details will be shared with shortlisted freelancers.',
@@ -460,7 +587,7 @@ function buildJobPayload(jobData) {
     },
     duration: normalizeDuration(jobData.duration),
     experienceLevel: normalizeExperienceLevel(jobData.experienceLevel),
-    attachments: jobData.files || [],
+    attachments,
   };
 }
 

@@ -105,9 +105,10 @@ export default function JobPostDraft() {
       toast.success(`${file.name} uploaded`);
     } catch (error) {
       console.error('Upload failed:', error);
-      toast.error(`Failed to upload ${file.name}`);
-      // Remove the failed file placeholder
-      setFiles(prev => prev.filter(f => f.name !== file.name));
+      const errorMessage = error.response?.data?.message || `Failed to upload ${file.name}`;
+      toast.error(errorMessage);
+      // Remove the failed file placeholder using tempId
+      setFiles(prev => prev.filter(f => f.id !== tempId));
     }
   };
 
@@ -288,37 +289,52 @@ export default function JobPostDraft() {
                 </div>
                 {/* Show uploaded files preview/thumbnails */}
                 {files.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-4">
-                    {files.map((file, idx) => (
-                      <div key={idx} className="relative flex flex-col items-center group">
-                        {file.uploading ? (
-                          <div className="w-20 h-20 flex items-center justify-center bg-gray-100 rounded border mb-1">
-                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-600"></div>
+                  <div className="mt-4 space-y-3">
+                    {files.map((file, idx) => {
+                      const isImage = file.type?.startsWith('image/');
+                      const fileSize = (file.size / 1024 / 1024).toFixed(2) + ' MB';
+
+                      return (
+                        <div key={file.id || idx} className="group flex items-center p-3 bg-white border border-gray-200 rounded-xl hover:shadow-sm hover:border-green-200 transition-all duration-200">
+                          {/* File Icon/Preview */}
+                          <div className="flex-shrink-0 w-12 h-12 bg-gray-50 rounded-lg flex items-center justify-center overflow-hidden border border-gray-100">
+                            {file.uploading ? (
+                              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-green-600"></div>
+                            ) : isImage && file.url ? (
+                              <img src={file.url} alt={file.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <Paperclip className="text-gray-400" size={20} />
+                            )}
                           </div>
-                        ) : file.type.startsWith('image/') ? (
-                          <img
-                            src={file.url}
-                            alt={file.name}
-                            className="w-20 h-20 object-cover rounded border mb-1"
-                          />
-                        ) : (
-                          <div className="w-20 h-20 flex flex-col items-center justify-center bg-gray-100 rounded border mb-1 p-1 text-center">
-                            <Paperclip size={20} className="text-gray-400 mb-1" />
-                            <span className="text-[10px] text-gray-500 line-clamp-2 break-all">{file.name}</span>
+
+                          {/* File Info */}
+                          <div className="ml-4 flex-1 min-w-0">
+                            <div className="flex items-center justify-between mb-1">
+                              <p className="text-sm font-medium text-gray-900 truncate pr-4" title={file.name}>
+                                {file.name}
+                              </p>
+                              {!file.uploading && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveFile(idx)}
+                                  className="text-gray-400 hover:text-red-500 p-1 rounded-md hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100"
+                                  title="Remove file"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {file.uploading ? (
+                                <span className="text-xs text-green-600 font-medium animate-pulse">Uploading...</span>
+                              ) : (
+                                <span className="text-xs text-gray-500">{fileSize}</span>
+                              )}
+                            </div>
                           </div>
-                        )}
-                        {!file.uploading && (
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveFile(idx)}
-                            className="absolute -top-2 -right-2 bg-white rounded-full shadow-md text-red-600 hover:bg-red-50 p-1 opacity-0 group-hover:opacity-100 transition-opacity border border-gray-200"
-                            title="Remove file"
-                          >
-                            <X size={14} />
-                          </button>
-                        )}
-                      </div>
-                    ))}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>

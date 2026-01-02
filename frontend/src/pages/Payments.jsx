@@ -1,21 +1,31 @@
 import { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements } from '@stripe/react-stripe-js';
-import { Eye, EyeOff, CreditCard, DollarSign, TrendingUp, Plus, X } from 'lucide-react';
+import { Eye, EyeOff, CreditCard, DollarSign, TrendingUp, Plus, X, CheckCircle } from 'lucide-react';
 import { usePaymentStore } from '../store/usePaymentStore.js';
 import { getStripeConfig } from '../api/paymentApi.js';
 import StripePaymentForm from '../components/payments/StripePaymentForm.jsx';
+import api from '../api/axiosInstance.js';
 
 export default function Payments() {
-  const { transactions, paymentMethods, loading, error, fetchTransactions, requestPayout } = usePaymentStore();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const consultationData = location.state; // Get consultation details from navigation
+
+  const { transactions, paymentMethods, loading, error, fetchTransactions, fetchPaymentMethods, addPaymentMethod, requestPayout } = usePaymentStore();
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [showPayoutForm, setShowPayoutForm] = useState(false);
   const [payoutAmount, setPayoutAmount] = useState('');
   const [stripePromise, setStripePromise] = useState(null);
   const [visibleCards, setVisibleCards] = useState({});
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState(null);
+  const [processingPayment, setProcessingPayment] = useState(false);
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
 
   useEffect(() => {
     fetchTransactions();
+    fetchPaymentMethods();
 
     const loadConfig = async () => {
       try {
@@ -29,7 +39,23 @@ export default function Payments() {
       }
     };
     loadConfig();
-  }, [fetchTransactions]);
+  }, [fetchTransactions, fetchPaymentMethods]);
+
+  const handlePaymentSuccess = async (paymentMethod) => {
+    try {
+      await addPaymentMethod({
+        paymentMethodId: paymentMethod.id,
+        ...paymentMethod.card
+      });
+      setShowPaymentForm(false);
+      // If we have consultation data, auto-select this new payment method
+      if (consultationData) {
+        setSelectedPaymentMethod(paymentMethod.id);
+      }
+    } catch (error) {
+      console.error('Failed to save payment method:', error);
+    }
+  };
 
   const handlePayout = async (e) => {
     e.preventDefault();
@@ -40,6 +66,42 @@ export default function Payments() {
       setPayoutAmount('');
     } catch (error) {
       console.error('Payout failed:', error);
+    }
+  };
+
+  const handleConsultationPayment = async () => {
+    if (!selectedPaymentMethod || !consultationData) return;
+
+    setProcessingPayment(true);
+    try {
+      // Make payment API call
+      const response = await api.post('/payments', {
+        amount: consultationData.amount,
+        description: consultationData.description,
+        paymentMethodId: selectedPaymentMethod,
+        metadata: {
+          type: 'consultation',
+          freelancerId: consultationData.freelancerId,
+          duration: consultationData.duration
+        }
+      });
+
+      if (response.data.success) {
+        setPaymentSuccess(true);
+        // Redirect to success page after 2 seconds
+        setTimeout(() => {
+          navigate('/dashboard', {
+            state: {
+              message: 'Consultation booked successfully!'
+            }
+          });
+        }, 2000);
+      }
+    } catch (error) {
+      console.error('Payment failed:', error);
+      alert(error.response?.data?.message || 'Payment failed. Please try again.');
+    } finally {
+      setProcessingPayment(false);
     }
   };
 
@@ -94,6 +156,124 @@ export default function Payments() {
             </div>
           </div>
         </div>
+
+        {/* Consultation Checkout Section - Only show if coming from consultation booking */}
+        {consultationData && !paymentSuccess && (
+          <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8">
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">Complete Your Booking</h2>
+
+            {/* Consultation Details */}
+            <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-6 mb-6">
+              <h3 className="font-semibold text-gray-900 mb-3">Consultation Details</h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Freelancer:</span>
+                  <span className="font-medium text-gray-900">{consultationData.freelancerName}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Duration:</span>
+                  <span className="font-medium text-gray-900">{consultationData.duration} minutes</span>
+                </div>
+                <div className="flex justify-between text-lg font-bold pt-2 border-t border-green-200">
+                  <span className="text-gray-900">Total:</span>
+                  <span className="text-green-600">${consultationData.amount}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Payment Method Selection */}
+            <div className="mb-6">
+              <h3 className="font-semibold text-gray-900 mb-4">Select Payment Method</h3>
+              {paymentMethods.length === 0 ? (
+                <div className="text-center py-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+                  <CreditCard className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                  <p className="text-gray-600 mb-4">No payment methods available</p>
+                  <button
+                    onClick={() => setShowPaymentForm(true)}
+                    className="text-green-600 hover:text-green-700 font-medium"
+                  >
+                    Add a payment method to continue →
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {paymentMethods.map((method) => {
+                    const cardId = method.id || method._id;
+                    const isSelected = selectedPaymentMethod === cardId;
+
+                    return (
+                      <label
+                        key={cardId}
+                        className={`flex items-center p-4 border-2 rounded-xl cursor-pointer transition-all ${isSelected
+                            ? 'border-green-600 bg-green-50 ring-2 ring-green-600'
+                            : 'border-gray-200 hover:border-gray-300 bg-white'
+                          }`}
+                      >
+                        <input
+                          type="radio"
+                          name="paymentMethod"
+                          value={cardId}
+                          checked={isSelected}
+                          onChange={() => setSelectedPaymentMethod(cardId)}
+                          className="hidden"
+                        />
+                        <div className="flex items-center gap-4 flex-1">
+                          <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${isSelected ? 'border-green-600' : 'border-gray-400'
+                            }`}>
+                            {isSelected && <div className="w-2.5 h-2.5 rounded-full bg-green-600" />}
+                          </div>
+                          <CreditCard className={`w-6 h-6 ${isSelected ? 'text-green-600' : 'text-gray-400'}`} />
+                          <div className="flex-1">
+                            <div className="font-semibold capitalize text-gray-900">
+                              {method.brand || 'Card'}
+                            </div>
+                            <div className="text-sm text-gray-600 font-mono">
+                              •••• •••• •••• {method.last4 || '••••'}
+                            </div>
+                          </div>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex gap-4">
+              <button
+                onClick={() => navigate(-1)}
+                className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConsultationPayment}
+                disabled={!selectedPaymentMethod || processingPayment}
+                className="flex-1 px-6 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {processingPayment ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    Processing...
+                  </>
+                ) : (
+                  `Pay $${consultationData.amount}`
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Payment Success Message */}
+        {paymentSuccess && (
+          <div className="bg-white rounded-2xl shadow-lg border border-green-200 p-8 text-center">
+            <CheckCircle className="w-16 h-16 text-green-600 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Payment Successful!</h2>
+            <p className="text-gray-600 mb-4">Your consultation has been booked successfully.</p>
+            <p className="text-sm text-gray-500">Redirecting to dashboard...</p>
+          </div>
+        )}
 
         <div className="grid gap-8 lg:grid-cols-2">
           {/* Payment Methods */}
@@ -231,7 +411,7 @@ export default function Payments() {
               {stripePromise ? (
                 <Elements stripe={stripePromise}>
                   <StripePaymentForm
-                    onSuccess={() => setShowPaymentForm(false)}
+                    onSuccess={handlePaymentSuccess}
                     onCancel={() => setShowPaymentForm(false)}
                   />
                 </Elements>

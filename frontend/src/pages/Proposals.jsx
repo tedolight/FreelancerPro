@@ -157,13 +157,15 @@ export default function Proposals() {
                       </span>
                       <span className="flex items-center gap-1">
                         <Calendar className="w-4 h-4" />
-                        {formatDistanceToNow(new Date(proposal.createdAt))} ago
+                        {proposal.createdAt && !isNaN(new Date(proposal.createdAt).getTime())
+                          ? `${formatDistanceToNow(new Date(proposal.createdAt))} ago`
+                          : 'Recently'}
                       </span>
                     </div>
                   </div>
                   <span className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-sm font-medium border ${getStatusColor(proposal.status)}`}>
                     {getStatusIcon(proposal.status)}
-                    {proposal.status.charAt(0).toUpperCase() + proposal.status.slice(1)}
+                    {proposal.status ? proposal.status.charAt(0).toUpperCase() + proposal.status.slice(1) : 'Pending'}
                   </span>
                 </div>
 
